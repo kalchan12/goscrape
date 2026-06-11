@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -126,5 +125,5 @@ func GetDefaultOutputDir() string {
 }
 
 func init() {
-	fmt.Fprintln(os.Stderr, "GoScrape v1.0.0 initialized")
+	// suppress extra init output
 }
