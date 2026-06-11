@@ -123,11 +123,14 @@ func NewScraper(cfg Config) *Scraper {
 		doc := e.DOM
 
 		title := doc.Find("title").First().Text()
+		bodyText := strings.TrimSpace(doc.Find("body").Text())
 
 		result := ScrapeResult{
 			URL:    e.Request.URL.String(),
 			Title:  title,
+			Text:   bodyText,
 			Status: e.Response.StatusCode,
+			HTML:   string(e.Response.Body),
 			Links:  make([]string, 0),
 			Files:  make([]FileRef, 0),
 		}
