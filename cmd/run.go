@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/kalchan12/goscrape/internal/output"
+	"github.com/kalchan12/goscrape/internal/python"
 	"github.com/kalchan12/goscrape/internal/scraper"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -84,7 +86,23 @@ var runCmd = &cobra.Command{
 		}
 
 		_, err = output.WriteResults(results, wrCfg)
-		return err
+		if err != nil {
+			return err
+		}
+
+		if runFlags.python != "" {
+			bridge, err := python.NewBridge(runFlags.python)
+			if err != nil {
+				return fmt.Errorf("python bridge: %w", err)
+			}
+			out, err := bridge.Process(results)
+			if err != nil {
+				return err
+			}
+			fmt.Println(out)
+		}
+
+		return nil
 	},
 }
 
