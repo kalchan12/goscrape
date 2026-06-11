@@ -3,43 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"regexp"
-	"strings"
-	"time"
 
+	"github.com/kalchan12/goscrape/internal/examutil"
 	"github.com/spf13/cobra"
 )
-
-type ExamQuestion struct {
-	QuestionKey    string         `json:"questionKey"`
-	SourceID       int            `json:"sourceId"`
-	Question       []TextBlock    `json:"question"`
-	Options        []OptionBlock  `json:"options"`
-	CorrectAnswers []int          `json:"correctAnswers"`
-	Explanation    string         `json:"explanation"`
-	SelectionMode  string         `json:"selectionMode"`
-	IsValid        bool           `json:"isValid"`
-}
-
-type TextBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type OptionBlock struct {
-	Key    string      `json:"key"`
-	Blocks []TextBlock `json:"blocks"`
-}
-
-type ExamData struct {
-	URL       string          `json:"url"`
-	Title     string          `json:"title"`
-	Questions []ExamQuestion  `json:"questions"`
-	Count     int             `json:"count"`
-}
 
 var examFlags struct {
 	url    string
@@ -59,30 +27,16 @@ var examCmd = &cobra.Command{
 			return cmd.Help()
 		}
 
-		// Fetch the page using a direct HTTP client
-		body, err := fetchPage(examFlags.url)
+		questions, title, err := examutil.ExtractQuestionsFromURL(examFlags.url)
 		if err != nil {
-			return fmt.Errorf("fetch failed: %w", err)
-		}
-
-		// Extract questions from RSC payload
-		questions, err := extractQuestionsFromRSC(body)
-		if err != nil {
-			return fmt.Errorf("extract failed: %w", err)
+			return err
 		}
 
 		if len(questions) == 0 {
 			return fmt.Errorf("no questions found on the page")
 		}
 
-		// Extract title
-		titleRe := regexp.MustCompile(`<title>([^<]+)</title>`)
-		title := ""
-		if m := titleRe.FindStringSubmatch(string(body)); len(m) > 1 {
-			title = m[1]
-		}
-
-		data := ExamData{
+		data := examutil.ExamData{
 			URL:       examFlags.url,
 			Title:     title,
 			Questions: questions,
@@ -110,112 +64,6 @@ var examCmd = &cobra.Command{
 
 		return nil
 	},
-}
-
-func fetchPage(url string) ([]byte, error) {
-	return getURL(url)
-}
-
-func extractQuestionsFromRSC(body []byte) ([]ExamQuestion, error) {
-	html := string(body)
-
-	// Find the __next_f.push chunk containing the "questions" array
-	chunkRe := regexp.MustCompile(`__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)`)
-	matches := chunkRe.FindAllStringSubmatch(html, -1)
-
-	for _, m := range matches {
-		chunk := m[1]
-		if !strings.Contains(chunk, "correctAnswer") {
-			continue
-		}
-
-		// Unescape the JS string
-		raw := unescapeJSString(chunk)
-
-		// Find the questions array
-		qIdx := strings.LastIndex(raw, `"questions":`)
-		if qIdx == -1 {
-			continue
-		}
-
-		arrStart := strings.Index(raw[qIdx:], "[")
-		if arrStart == -1 {
-			continue
-		}
-		arrStart += qIdx
-
-		depth := 0
-		arrEnd := arrStart
-		for i := arrStart; i < len(raw); i++ {
-			switch raw[i] {
-			case '[':
-				depth++
-			case ']':
-				depth--
-				if depth == 0 {
-					arrEnd = i + 1
-					goto found
-				}
-			}
-		}
-		continue
-
-	found:
-		questionsJSON := raw[arrStart:arrEnd]
-		var questions []ExamQuestion
-		if err := json.Unmarshal([]byte(questionsJSON), &questions); err != nil {
-			return nil, fmt.Errorf("parse questions JSON: %w", err)
-		}
-		return questions, nil
-	}
-
-	return nil, fmt.Errorf("no RSC chunk with questions found")
-}
-
-func unescapeJSString(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) {
-			switch s[i+1] {
-			case '"':
-				b.WriteByte('"')
-				i++
-			case '\\':
-				b.WriteByte('\\')
-				i++
-			case 'n':
-				b.WriteByte('\n')
-				i++
-			case 't':
-				b.WriteByte('\t')
-				i++
-			case '/':
-				b.WriteByte('/')
-				i++
-			default:
-				b.WriteByte(s[i])
-			}
-		} else {
-			b.WriteByte(s[i])
-		}
-	}
-	return b.String()
-}
-
-func getURL(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 60 * time.Second}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
 }
 
 func init() {
