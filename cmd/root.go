@@ -22,13 +22,14 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "goscrape",
-	Short: "GoScrape - Terminal-based web scraping tool",
-	Long:  `A production-ready terminal web scraper with CLI and TUI modes.`,
+	Short: "GoScrape - terminal web scraper with CLI and TUI modes",
+	Long:  `A fast terminal web scraper built in Go with CLI commands and interactive TUI.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		return initLogger()
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Print(banner)
+		fmt.Print(usageExamples)
 		cmd.Help()
 	},
 }
@@ -135,6 +136,14 @@ var banner = "\x1b[1;36m" + `
                                        |_|
 ` + "\x1b[0m" + "\x1b[33m" + `           Author: Psycho
 ` + "\x1b[0m" + "\n"
+
+var usageExamples = "\x1b[1;37mExamples:\x1b[0m\n" +
+	"  \x1b[32mgoscrape run --url https://example.com\x1b[0m               Scrape a website\n" +
+	"  \x1b[32mgoscrape run --url https://example.com --js\x1b[0m           Scrape with headless browser\n" +
+	"  \x1b[32mgoscrape extract --url https://example.com\x1b[0m            Extract JSON-LD, meta, OG tags\n" +
+	"  \x1b[32mgoscrape download --url https://example.com --types pdf,json\x1b[0m  Download files\n" +
+	"  \x1b[32mgoscrape history list\x1b[0m                                  View crawl history\n" +
+	"  \x1b[32mgoscrape interactive\x1b[0m                                   Launch TUI mode\n\n"
 
 func init() {
 	// suppress extra init output
