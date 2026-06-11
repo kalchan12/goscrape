@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -27,6 +28,7 @@ var rootCmd = &cobra.Command{
 		return initLogger()
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Print(banner)
 		cmd.Help()
 	},
 }
@@ -123,6 +125,16 @@ func GetConfigBool(key string) bool {
 func GetDefaultOutputDir() string {
 	return viper.GetString("default_output")
 }
+
+var banner = "\x1b[1;36m" + `
+   ____                 _____
+  / ___| ___  _ __ __ _|_   _| __ ___  _ __ _ __ ___ _ __
+ | |  _ / _ \| '__/ _` + "`" + ` | | || '__/ _ \| '_ \ '__/ _ \ '__|
+ | |_| | (_) | | | (_| | | || | | (_) | |_) | | |  __/ |
+  \____|\___/|_|  \__,_| |_||_|  \___/| .__/|_|  \___|_|
+                                       |_|
+` + "\x1b[0m" + "\x1b[33m" + `           Author: Psycho
+` + "\x1b[0m" + "\n"
 
 func init() {
 	// suppress extra init output
