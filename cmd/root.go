@@ -68,7 +68,6 @@ func initConfig() {
 	viper.SetDefault("default_format", "json")
 	viper.SetDefault("rotate_agents", true)
 	viper.SetDefault("user_agent", "GoScrape/1.0")
-	viper.SetDefault("python_path", "python3")
 
 	viper.ReadInConfig()
 }

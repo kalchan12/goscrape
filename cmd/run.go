@@ -1,11 +1,10 @@
 package cmd
 
 import (
-	"fmt"
+	"context"
 	"time"
 
 	"github.com/kalchan12/goscrape/internal/output"
-	"github.com/kalchan12/goscrape/internal/python"
 	"github.com/kalchan12/goscrape/internal/scraper"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -31,7 +30,6 @@ var runFlags struct {
 	download     []string
 	downloadAll  bool
 	flatten      bool
-	python       string
 	noProgress   bool
 	stdin        bool
 }
@@ -72,7 +70,7 @@ var runCmd = &cobra.Command{
 		}
 
 		s := scraper.NewScraper(cfg)
-		results, err := s.Run()
+		results, err := s.Run(context.Background())
 		if err != nil {
 			return err
 		}
@@ -88,18 +86,6 @@ var runCmd = &cobra.Command{
 		_, err = output.WriteResults(results, wrCfg)
 		if err != nil {
 			return err
-		}
-
-		if runFlags.python != "" {
-			bridge, err := python.NewBridge(runFlags.python)
-			if err != nil {
-				return fmt.Errorf("python bridge: %w", err)
-			}
-			out, err := bridge.Process(results)
-			if err != nil {
-				return err
-			}
-			fmt.Println(out)
 		}
 
 		return nil
@@ -128,7 +114,6 @@ func init() {
 	runCmd.Flags().StringArrayVar(&runFlags.download, "download", nil, "File types to download")
 	runCmd.Flags().BoolVar(&runFlags.downloadAll, "download-all", false, "Download all file types")
 	runCmd.Flags().BoolVar(&runFlags.flatten, "flatten", false, "Flatten download dirs")
-	runCmd.Flags().StringVar(&runFlags.python, "python", "", "Python script to pipe results")
 	runCmd.Flags().BoolVar(&runFlags.noProgress, "no-progress", false, "Disable progress bar")
 	runCmd.Flags().BoolVar(&runFlags.stdin, "stdin", false, "Read URLs from stdin")
 }
