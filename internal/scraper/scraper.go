@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -50,18 +51,21 @@ type Config struct {
 	DownloadTypes  []string
 	DownloadAll    bool
 	Verbose        bool
+	RateLimitRPS   float64
+	RateLimitBurst int
 }
 
 type Scraper struct {
-	config    Config
-	collector *colly.Collector
-	results   []ScrapeResult
+	config       Config
+	collector    *colly.Collector
+	results      []ScrapeResult
 	pagesVisited int
-	mu        sync.Mutex
-	done      chan bool
-	errors    int
-	startTime time.Time
-	fileChan  chan FileRef
+	mu           sync.Mutex
+	done         chan bool
+	errors       int
+	startTime    time.Time
+	fileChan     chan FileRef
+	rateLimiter  *DomainRateLimiter
 }
 
 func NewScraper(cfg Config) *Scraper {
@@ -71,6 +75,16 @@ func NewScraper(cfg Config) *Scraper {
 		done:     make(chan bool),
 		fileChan: make(chan FileRef, 100),
 	}
+
+	rps := cfg.RateLimitRPS
+	if rps <= 0 {
+		rps = 2
+	}
+	burst := cfg.RateLimitBurst
+	if burst <= 0 {
+		burst = 3
+	}
+	s.rateLimiter = NewDomainRateLimiter(rps, burst)
 
 	c := colly.NewCollector(
 		colly.Async(true),
@@ -96,6 +110,11 @@ func NewScraper(cfg Config) *Scraper {
 	c.SetRequestTimeout(cfg.Timeout)
 
 	c.OnRequest(func(r *colly.Request) {
+		domain := extractDomain(r.URL.String())
+		if err := s.rateLimiter.Wait(domain); err != nil {
+			return
+		}
+
 		zap.L().Debug("Fetching",
 			zap.String("url", r.URL.String()),
 			zap.Int("depth", r.Depth),
@@ -201,7 +220,7 @@ func NewScraper(cfg Config) *Scraper {
 	return s
 }
 
-func (s *Scraper) Run() ([]ScrapeResult, error) {
+func (s *Scraper) Run(ctx context.Context) ([]ScrapeResult, error) {
 	s.startTime = time.Now()
 	zap.L().Info("Starting scrape",
 		zap.String("url", s.config.URL),
@@ -209,7 +228,7 @@ func (s *Scraper) Run() ([]ScrapeResult, error) {
 		zap.Int("max_pages", s.config.MaxPages),
 	)
 
-	err := s.collector.Visit(s.config.URL)
+	err := s.visitWithRetry(ctx, s.config.URL, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start scrape: %w", err)
 	}
@@ -225,6 +244,32 @@ func (s *Scraper) Run() ([]ScrapeResult, error) {
 	)
 
 	return s.results, nil
+}
+
+func (s *Scraper) visitWithRetry(ctx context.Context, url string, depth int) error {
+	var lastErr error
+	maxRetries := s.config.Retries
+	if maxRetries < 0 {
+		maxRetries = 0
+	}
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := time.Duration(attempt) * time.Second * 2
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		if err := s.collector.Visit(url); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 func (s *Scraper) Results() []ScrapeResult {
@@ -260,6 +305,7 @@ func extractDomain(rawURL string) string {
 }
 
 func fileTypeFromExt(ext string) string {
+	ext = strings.ToLower(ext)
 	switch ext {
 	case ".pdf":
 		return "pdf"

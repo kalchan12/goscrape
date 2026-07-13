@@ -7,6 +7,7 @@ import (
 	"github.com/kalchan12/goscrape/internal/downloader"
 	"github.com/kalchan12/goscrape/internal/scraper"
 	"github.com/spf13/cobra"
+	"context"
 )
 
 var downloadFlags struct {
@@ -40,7 +41,7 @@ var downloadCmd = &cobra.Command{
 		}
 
 		s := scraper.NewScraper(cfg)
-		results, err := s.Run()
+		results, err := s.Run(context.Background())
 		if err != nil {
 			return err
 		}

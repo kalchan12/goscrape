@@ -8,6 +8,7 @@ import (
 	"github.com/kalchan12/goscrape/internal/extractor"
 	"github.com/kalchan12/goscrape/internal/scraper"
 	"github.com/spf13/cobra"
+	"context"
 )
 
 var extractFlags struct {
@@ -34,7 +35,7 @@ var extractCmd = &cobra.Command{
 		}
 
 		s := scraper.NewScraper(cfg)
-		results, err := s.Run()
+		results, err := s.Run(context.Background())
 		if err != nil {
 			return err
 		}

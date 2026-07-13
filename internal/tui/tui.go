@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -167,7 +168,7 @@ func (m model) startScrape() tea.Cmd {
 		}
 
 		s := scraper.NewScraper(cfg)
-		results, err := s.Run()
+		results, err := s.Run(context.Background())
 		return scrapeDone{results: results, err: err}
 	}
 }
