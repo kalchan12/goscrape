@@ -45,7 +45,10 @@ type ExamLink struct {
 	URL        string
 }
 
-var httpClient = &http.Client{Timeout: 60 * time.Second}
+var (
+	httpClient      = &http.Client{Timeout: 60 * time.Second}
+	defaultStrategy = &ExitExamStudioStrategy{}
+)
 
 func FetchPage(url string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
@@ -179,48 +182,9 @@ func unescapeJSString(s string) string {
 	return b.String()
 }
 
-func ExtractExamLinksFromDept(body []byte) []ExamLink {
+func ExtractDepartmentsWithStrategy(body []byte, s ExamSiteStrategy) []string {
 	html := string(body)
-	re := regexp.MustCompile(`/exam/([^"\'\\]+)`)
-	seen := make(map[string]bool)
-	var links []ExamLink
-
-	matches := re.FindAllStringSubmatch(html, -1)
-	for _, m := range matches {
-		path := "/exam/" + m[1]
-		if seen[path] {
-			continue
-		}
-		seen[path] = true
-
-		// Parse: department__year__type
-		parts := strings.Split(m[1], "__")
-		if len(parts) < 3 {
-			continue
-		}
-		examType := parts[len(parts)-1]
-		year := parts[len(parts)-2]
-		// Department slug is everything before the last two __ parts
-		dept := strings.Join(parts[:len(parts)-2], "__")
-
-		// Unescape any \\ added by RSC escaping
-		dept = strings.ReplaceAll(dept, "\\", "")
-		year = strings.ReplaceAll(year, "\\", "")
-		examType = strings.ReplaceAll(examType, "\\", "")
-
-		links = append(links, ExamLink{
-			Department: dept,
-			Year:       year,
-			ExamType:   examType,
-			URL:        "https://exitexamstudio.app" + path,
-		})
-	}
-	return links
-}
-
-func ExtractDepartmentLinks(body []byte) []string {
-	html := string(body)
-	re := regexp.MustCompile(`/departments/([a-z0-9_-]+)`)
+	re := s.DepartmentLinkRe()
 	seen := make(map[string]bool)
 	var depts []string
 
@@ -234,4 +198,41 @@ func ExtractDepartmentLinks(body []byte) []string {
 		depts = append(depts, slug)
 	}
 	return depts
+}
+
+func ExtractDepartmentLinks(body []byte) []string {
+	return ExtractDepartmentsWithStrategy(body, defaultStrategy)
+}
+
+func ExtractExamsFromDeptWithStrategy(body []byte, s ExamSiteStrategy) []ExamLink {
+	html := string(body)
+	re := s.ExamLinkRe()
+	seen := make(map[string]bool)
+	var links []ExamLink
+
+	matches := re.FindAllStringSubmatch(html, -1)
+	for _, m := range matches {
+		path := "/exam/" + m[1]
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+
+		dept, year, examType := s.ParseExamSlug(m[1])
+		if dept == "" {
+			continue
+		}
+
+		links = append(links, ExamLink{
+			Department: dept,
+			Year:       year,
+			ExamType:   examType,
+			URL:        strings.TrimSuffix(s.BaseURL(), "/") + path,
+		})
+	}
+	return links
+}
+
+func ExtractExamLinksFromDept(body []byte) []ExamLink {
+	return ExtractExamsFromDeptWithStrategy(body, defaultStrategy)
 }
