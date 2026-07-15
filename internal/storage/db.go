@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -85,6 +87,98 @@ func (d *DB) Delete(id uint) error {
 func (d *DB) Clear() error {
 	return d.db.Session(&gorm.Session{AllowGlobalUpdate: true}).
 		Delete(&CrawlRecord{}).Error
+}
+
+func (d *DB) ListByStatus(status string, limit int) ([]CrawlRecord, error) {
+	var records []CrawlRecord
+	err := d.db.Where("status = ?", status).Order("created_at DESC").Limit(limit).Find(&records).Error
+	return records, err
+}
+
+type Stats struct {
+	TotalCrawls int64   `json:"total_crawls"`
+	TotalFiles  int64   `json:"total_files"`
+	TotalPages  int64   `json:"total_pages"`
+	ByStatus    map[string]int64 `json:"by_status"`
+}
+
+func (d *DB) Stats() (*Stats, error) {
+	var totalCrawls, totalFiles, totalPages int64
+	if err := d.db.Model(&CrawlRecord{}).Count(&totalCrawls).Error; err != nil {
+		return nil, err
+	}
+	if err := d.db.Model(&CrawlRecord{}).Select("COALESCE(SUM(files), 0)").Scan(&totalFiles).Error; err != nil {
+		return nil, err
+	}
+	if err := d.db.Model(&CrawlRecord{}).Select("COALESCE(SUM(pages_hit), 0)").Scan(&totalPages).Error; err != nil {
+		return nil, err
+	}
+
+	type statusCount struct {
+		Status string
+		Count  int64
+	}
+	var rows []statusCount
+	if err := d.db.Model(&CrawlRecord{}).Select("status, COUNT(*) as count").Group("status").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	byStatus := make(map[string]int64)
+	for _, r := range rows {
+		byStatus[r.Status] = r.Count
+	}
+
+	return &Stats{
+		TotalCrawls: totalCrawls,
+		TotalFiles:  totalFiles,
+		TotalPages:  totalPages,
+		ByStatus:    byStatus,
+	}, nil
+}
+
+func (d *DB) ExportJSON(w *os.File) error {
+	var records []CrawlRecord
+	if err := d.db.Order("created_at DESC").Find(&records).Error; err != nil {
+		return err
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(records)
+}
+
+func (d *DB) ExportCSV(w *os.File) error {
+	var records []CrawlRecord
+	if err := d.db.Order("created_at DESC").Find(&records).Error; err != nil {
+		return err
+	}
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	if err := writer.Write([]string{"ID", "URL", "Depth", "MaxPages", "PagesHit", "Files", "Status", "CreatedAt", "UpdatedAt"}); err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		if err := writer.Write([]string{
+			fmt.Sprintf("%d", r.ID),
+			r.URL,
+			fmt.Sprintf("%d", r.Depth),
+			fmt.Sprintf("%d", r.MaxPages),
+			fmt.Sprintf("%d", r.PagesHit),
+			fmt.Sprintf("%d", r.Files),
+			r.Status,
+			r.CreatedAt.Format(time.RFC3339),
+			r.UpdatedAt.Format(time.RFC3339),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DB) Cleanup(before time.Time) (int64, error) {
+	result := d.db.Where("created_at < ?", before).Delete(&CrawlRecord{})
+	return result.RowsAffected, result.Error
 }
 
 func (d *DB) Close() error {

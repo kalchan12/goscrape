@@ -151,3 +151,95 @@ func TestClose(t *testing.T) {
 	err := db.Close()
 	assert.NoError(t, err)
 }
+
+func TestListByStatus(t *testing.T) {
+	db := newTestDB(t)
+	insertTestRecord(t, db, "https://example.com/a", "completed")
+	insertTestRecord(t, db, "https://example.com/b", "running")
+	insertTestRecord(t, db, "https://example.com/c", "completed")
+
+	completed, err := db.ListByStatus("completed", 10)
+	require.NoError(t, err)
+	assert.Len(t, completed, 2)
+
+	running, err := db.ListByStatus("running", 10)
+	require.NoError(t, err)
+	assert.Len(t, running, 1)
+}
+
+func TestStats(t *testing.T) {
+	db := newTestDB(t)
+	insertTestRecord(t, db, "https://example.com/a", "completed")
+	insertTestRecord(t, db, "https://example.com/b", "completed")
+	insertTestRecord(t, db, "https://example.com/c", "failed")
+
+	stats, err := db.Stats()
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), stats.TotalCrawls)
+	assert.Equal(t, int64(6), stats.TotalFiles)
+	assert.Equal(t, int64(15), stats.TotalPages)
+	assert.Equal(t, int64(2), stats.ByStatus["completed"])
+	assert.Equal(t, int64(1), stats.ByStatus["failed"])
+}
+
+func TestExportJSON(t *testing.T) {
+	db := newTestDB(t)
+	insertTestRecord(t, db, "https://example.com", "completed")
+
+	f, err := os.CreateTemp("", "export-*.json")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	err = db.ExportJSON(f)
+	require.NoError(t, err)
+	f.Close()
+
+	data, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "https://example.com")
+}
+
+func TestExportCSV(t *testing.T) {
+	db := newTestDB(t)
+	insertTestRecord(t, db, "https://example.com", "completed")
+
+	f, err := os.CreateTemp("", "export-*.csv")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	err = db.ExportCSV(f)
+	require.NoError(t, err)
+	f.Close()
+
+	data, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "https://example.com")
+	assert.Contains(t, string(data), "ID,URL,Depth")
+}
+
+func TestCleanup(t *testing.T) {
+	db := newTestDB(t)
+	old := &CrawlRecord{
+		URL:       "https://example.com/old",
+		Depth:     1,
+		MaxPages:  10,
+		PagesHit:  5,
+		Files:     2,
+		Status:    "completed",
+		CreatedAt: time.Now().Add(-48 * time.Hour),
+		UpdatedAt: time.Now().Add(-48 * time.Hour),
+	}
+	require.NoError(t, db.Insert(old))
+
+	newRecord := insertTestRecord(t, db, "https://example.com/new", "completed")
+
+	count, err := db.Cleanup(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	_, err = db.GetByID(old.ID)
+	assert.Error(t, err)
+
+	_, err = db.GetByID(newRecord.ID)
+	assert.NoError(t, err)
+}
