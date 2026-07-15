@@ -1,6 +1,7 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"sort"
@@ -35,7 +36,7 @@ func New(seedPath string) *SiteTree {
 	}
 }
 
-func (st *SiteTree) Crawl(rawURL string, maxDepth int) error {
+func (st *SiteTree) Crawl(ctx context.Context, rawURL string, maxDepth int) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return err
@@ -93,7 +94,18 @@ func (st *SiteTree) Crawl(rawURL string, maxDepth int) error {
 	if err := c.Visit(rawURL); err != nil {
 		return err
 	}
-	c.Wait()
+
+	done := make(chan struct{})
+	go func() {
+		c.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	st.buildTree()
 	return nil

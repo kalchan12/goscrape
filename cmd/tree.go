@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 
@@ -16,9 +17,12 @@ var treeFlags struct {
 var treeCmd = &cobra.Command{
 	Use:   "tree --url <URL>",
 	Short: "Discover and display site directory structure",
-	Long:  `Crawl a website and show all discovered URL paths as a directory tree.`,
-	Example: `  goscrape tree --url https://exitexamstudio.app/
-  goscrape tree --url https://exitexamstudio.app/ --depth 3`,
+	Long: `Crawl a website and show all discovered URL paths as a directory tree.
+
+Useful for understanding site structure before scraping or downloading.`,
+	Example: `  goscrape tree --url https://example.com
+  goscrape tree --url https://example.com --depth 3
+  goscrape tree --url https://example.com --depth 5`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if treeFlags.url == "" {
 			return cmd.Help()
@@ -31,7 +35,7 @@ var treeCmd = &cobra.Command{
 		}
 
 		t := tree.New(seedPath)
-		if err := t.Crawl(treeFlags.url, treeFlags.depth); err != nil {
+		if err := t.Crawl(context.Background(), treeFlags.url, treeFlags.depth); err != nil {
 			return fmt.Errorf("crawl failed: %w", err)
 		}
 

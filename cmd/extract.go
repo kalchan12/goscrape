@@ -21,7 +21,12 @@ var extractFlags struct {
 var extractCmd = &cobra.Command{
 	Use:   "extract --url <URL>",
 	Short: "Extract structured data (JSON-LD, OG, meta) from a page",
-	Long:  `Crawl a URL and extract JSON-LD, Open Graph tags, meta tags, headings, and links.`,
+	Long: `Crawl a URL and extract JSON-LD structured data, Open Graph tags, meta tags, headings, and links.
+
+Outputs formatted results to stdout or a file.`,
+	Example: `  goscrape extract --url https://example.com
+  goscrape extract --url https://example.com --format json
+  goscrape extract --url https://example.com --selector "article" --depth 2`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if extractFlags.url == "" {
 			return cmd.Help()

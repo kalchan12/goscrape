@@ -37,6 +37,24 @@ default_timeout: 30s
 default_retries: 2
 rotate_agents: true
 user_agent: GoScrape/1.0
+respect_robots: false
+
+rate_limit:
+  requests_per_second: 2
+  burst: 5
+
+exam:
+  base_url: https://exitexamstudio.app
+  strategy: exitexamstudio
+  output_dir: ~/exams
+  workers: 10
+
+downloader:
+  max_retries: 3
+  retry_delay: 2s
+  resume: true
+  min_size: 0
+  max_size: 0
 `
 
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
@@ -61,6 +79,18 @@ var configShowCmd = &cobra.Command{
 		fmt.Printf("default_retries: %d\n", GetConfigInt("default_retries"))
 		fmt.Printf("rotate_agents: %t\n", GetConfigBool("rotate_agents"))
 		fmt.Printf("user_agent: %s\n", GetConfigString("user_agent"))
+		fmt.Printf("rate_limit.requests_per_second: %.1f\n", GetConfigFloat64("rate_limit.requests_per_second"))
+		fmt.Printf("rate_limit.burst: %d\n", GetConfigInt("rate_limit.burst"))
+		fmt.Printf("respect_robots: %t\n", GetConfigBool("respect_robots"))
+		fmt.Printf("exam.base_url: %s\n", GetConfigString("exam.base_url"))
+		fmt.Printf("exam.strategy: %s\n", GetConfigString("exam.strategy"))
+		fmt.Printf("exam.output_dir: %s\n", GetConfigString("exam.output_dir"))
+		fmt.Printf("exam.workers: %d\n", GetConfigInt("exam.workers"))
+		fmt.Printf("downloader.max_retries: %d\n", GetConfigInt("downloader.max_retries"))
+		fmt.Printf("downloader.retry_delay: %s\n", GetConfigString("downloader.retry_delay"))
+		fmt.Printf("downloader.resume: %t\n", GetConfigBool("downloader.resume"))
+		fmt.Printf("downloader.min_size: %d\n", GetConfigInt("downloader.min_size"))
+		fmt.Printf("downloader.max_size: %d\n", GetConfigInt("downloader.max_size"))
 	},
 }
 

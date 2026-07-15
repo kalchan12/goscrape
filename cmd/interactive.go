@@ -9,7 +9,12 @@ var interactiveCmd = &cobra.Command{
 	Use:     "interactive",
 	Aliases: []string{"tui", "i"},
 	Short:   "Launch interactive TUI mode",
-	Long:    `Start the terminal UI for interactive web scraping with real-time feedback.`,
+	Long: `Start the terminal UI for interactive web scraping with real-time feedback.
+
+Features a text input for URLs, live progress spinner, and scrollable results view.`,
+	Example: `  goscrape interactive
+  goscrape tui
+  goscrape i`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return tui.Run()
 	},

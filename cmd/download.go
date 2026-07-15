@@ -25,7 +25,14 @@ var downloadFlags struct {
 var downloadCmd = &cobra.Command{
 	Use:   "download --url <URL> --types pdf,json",
 	Short: "Download files of specified types from a URL",
-	Long:  `Find and download files (PDF, JSON, CSV, etc.) linked from a webpage.`,
+	Long: `Find and download files (PDF, JSON, CSV, etc.) linked from a webpage.
+
+Supports concurrent downloads, file size limits, overwrite control, and dry-run mode.`,
+	Example: `  goscrape download --url https://example.com --types pdf
+  goscrape download --url https://example.com --types pdf,json,csv
+  goscrape download --url https://example.com --types pdf --output ./files --workers 5
+  goscrape download --url https://example.com --types pdf --dry-run
+  goscrape download --url https://example.com --types pdf --overwrite`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if downloadFlags.url == "" {
 			return cmd.Help()
@@ -72,7 +79,7 @@ var downloadCmd = &cobra.Command{
 		}
 
 		dl := downloader.NewDownloader(downloadFlags.workers, downloadFlags.overwrite, 0, 0)
-		results2 := dl.Run(tasks)
+		results2 := dl.Run(context.Background(), tasks)
 
 		var downloaded, skipped, failed int
 		for _, r := range results2 {

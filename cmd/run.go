@@ -37,7 +37,15 @@ var runFlags struct {
 var runCmd = &cobra.Command{
 	Use:   "run --url <URL>",
 	Short: "Crawl a website and extract content",
-	Long:  `Start a web scraping session. Crawls pages from the seed URL, extracts content, and optionally downloads files.`,
+	Long: `Start a web scraping session. Crawls pages from the seed URL, extracts content, and optionally downloads files.
+
+Supports depth-limited crawling, concurrent workers, custom CSS selectors, headless JS rendering, and file download.`,
+	Example: `  goscrape run --url https://example.com
+  goscrape run --url https://example.com --depth 3 --workers 5
+  goscrape run --url https://example.com --js
+  goscrape run --url https://example.com --selector "article" --format json
+  goscrape run --url https://example.com --delay 2s --retries 3
+  goscrape run --url https://example.com --download pdf,json --output ./downloads`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if runFlags.url == "" && !runFlags.stdin {
 			return cmd.Help()

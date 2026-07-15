@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -181,11 +182,17 @@ func TestRunOverwrite(t *testing.T) {
 }
 
 func TestRunConcurrentDownloads(t *testing.T) {
-	var count int
+	var (
+		count int
+		mu    sync.Mutex
+	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		count++
+		c := count
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "file %d", count)
+		fmt.Fprintf(w, "file %d", c)
 	}))
 	defer srv.Close()
 

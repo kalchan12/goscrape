@@ -72,6 +72,18 @@ func initConfig() {
 	viper.SetDefault("default_retries", 2)
 	viper.SetDefault("rotate_agents", true)
 	viper.SetDefault("user_agent", "GoScrape/1.0")
+	viper.SetDefault("rate_limit.requests_per_second", 2)
+	viper.SetDefault("rate_limit.burst", 5)
+	viper.SetDefault("respect_robots", false)
+	viper.SetDefault("exam.base_url", "https://exitexamstudio.app")
+	viper.SetDefault("exam.strategy", "exitexamstudio")
+	viper.SetDefault("exam.output_dir", "~/exams")
+	viper.SetDefault("exam.workers", 10)
+	viper.SetDefault("downloader.max_retries", 3)
+	viper.SetDefault("downloader.retry_delay", "2s")
+	viper.SetDefault("downloader.resume", true)
+	viper.SetDefault("downloader.min_size", 0)
+	viper.SetDefault("downloader.max_size", 0)
 
 	viper.ReadInConfig()
 }
@@ -124,6 +136,10 @@ func GetConfigInt(key string) int {
 
 func GetConfigBool(key string) bool {
 	return viper.GetBool(key)
+}
+
+func GetConfigFloat64(key string) float64 {
+	return viper.GetFloat64(key)
 }
 
 func GetDefaultOutputDir() string {
