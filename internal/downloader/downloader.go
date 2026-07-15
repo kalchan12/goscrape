@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"crypto/md5"
 	"fmt"
 	"io"
@@ -29,52 +30,132 @@ type DownloadResult struct {
 	Skipped  bool
 }
 
+type ProgressFunc func(completed, total int)
+
 type Downloader struct {
-	workers  int
-	overwrite bool
-	minSize  int64
-	maxSize  int64
-	client   *http.Client
+	workers    int
+	overwrite  bool
+	minSize    int64
+	maxSize    int64
+	maxRetries int
+	retryDelay time.Duration
+	progressFn ProgressFunc
+	client     *http.Client
+	rateLimiter *DomainRateLimiter
 }
 
 func NewDownloader(workers int, overwrite bool, minSize, maxSize int64) *Downloader {
 	return &Downloader{
-		workers:   workers,
-		overwrite: overwrite,
-		minSize:   minSize,
-		maxSize:   maxSize,
+		workers:    workers,
+		overwrite:  overwrite,
+		minSize:    minSize,
+		maxSize:    maxSize,
+		maxRetries: 2,
+		retryDelay: 2 * time.Second,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		rateLimiter: NewDomainRateLimiter(2, 3),
 	}
 }
 
-func (d *Downloader) Run(tasks []DownloadTask) []DownloadResult {
+func (d *Downloader) WithRetries(maxRetries int, delay time.Duration) *Downloader {
+	d.maxRetries = maxRetries
+	d.retryDelay = delay
+	return d
+}
+
+func (d *Downloader) WithProgress(fn ProgressFunc) *Downloader {
+	d.progressFn = fn
+	return d
+}
+
+func (d *Downloader) WithRateLimit(rps float64, burst int) *Downloader {
+	d.rateLimiter = NewDomainRateLimiter(rps, burst)
+	return d
+}
+
+func (d *Downloader) Run(ctx context.Context, tasks []DownloadTask) []DownloadResult {
 	var wg sync.WaitGroup
 	taskChan := make(chan DownloadTask, len(tasks))
 	results := make([]DownloadResult, 0, len(tasks))
 	var mu sync.Mutex
+	total := len(tasks)
+	var completed int
 
 	for i := 0; i < d.workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for task := range taskChan {
-				result := d.downloadFile(task)
+				select {
+				case <-ctx.Done():
+					mu.Lock()
+					results = append(results, DownloadResult{Task: task, Error: ctx.Err()})
+					mu.Unlock()
+					continue
+				default:
+				}
+
+				domain := extractDomain(task.URL)
+				if err := d.rateLimiter.Wait(domain); err != nil {
+					mu.Lock()
+					results = append(results, DownloadResult{Task: task, Error: err})
+					mu.Unlock()
+					continue
+				}
+
+				result := d.downloadFileWithRetry(task, ctx)
 				mu.Lock()
 				results = append(results, result)
+				completed++
+				if d.progressFn != nil {
+					d.progressFn(completed, total)
+				}
 				mu.Unlock()
 			}
 		}()
 	}
 
 	for _, task := range tasks {
-		taskChan <- task
+		select {
+		case taskChan <- task:
+		case <-ctx.Done():
+			close(taskChan)
+			wg.Wait()
+			return results
+		}
 	}
 	close(taskChan)
 	wg.Wait()
 
 	return results
+}
+
+func (d *Downloader) downloadFileWithRetry(task DownloadTask, ctx context.Context) DownloadResult {
+	var lastErr error
+	for attempt := 0; attempt <= d.maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := d.retryDelay * time.Duration(attempt)
+			select {
+			case <-ctx.Done():
+				return DownloadResult{Task: task, Error: ctx.Err()}
+			case <-time.After(delay):
+			}
+		}
+
+		result := d.downloadFile(task)
+		if result.Error == nil {
+			return result
+		}
+		lastErr = result.Error
+		zap.L().Warn("Download retry",
+			zap.String("url", task.URL),
+			zap.Int("attempt", attempt+1),
+			zap.Error(lastErr),
+		)
+	}
+	return DownloadResult{Task: task, Error: fmt.Errorf("download failed after %d retries: %w", d.maxRetries, lastErr)}
 }
 
 func (d *Downloader) downloadFile(task DownloadTask) DownloadResult {
@@ -92,13 +173,24 @@ func (d *Downloader) downloadFile(task DownloadTask) DownloadResult {
 		}
 	}
 
-	resp, err := d.client.Get(task.URL)
+	req, err := http.NewRequest(http.MethodGet, task.URL, nil)
+	if err != nil {
+		return DownloadResult{Task: task, Error: fmt.Errorf("create request: %w", err)}
+	}
+
+	if d.overwrite {
+		if fi, err := os.Stat(destPath); err == nil {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", fi.Size()))
+		}
+	}
+
+	resp, err := d.client.Do(req)
 	if err != nil {
 		return DownloadResult{Task: task, Error: fmt.Errorf("http get: %w", err)}
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		return DownloadResult{Task: task, Error: fmt.Errorf("http %d", resp.StatusCode)}
 	}
 
@@ -109,7 +201,14 @@ func (d *Downloader) downloadFile(task DownloadTask) DownloadResult {
 		return DownloadResult{Task: task, Error: fmt.Errorf("file too small: %d bytes", resp.ContentLength)}
 	}
 
-	f, err := os.Create(destPath)
+	openFlags := os.O_CREATE | os.O_WRONLY
+	if resp.StatusCode == http.StatusPartialContent {
+		openFlags |= os.O_APPEND
+	} else {
+		openFlags |= os.O_TRUNC
+	}
+
+	f, err := os.OpenFile(destPath, openFlags, 0644)
 	if err != nil {
 		return DownloadResult{Task: task, Error: fmt.Errorf("create: %w", err)}
 	}

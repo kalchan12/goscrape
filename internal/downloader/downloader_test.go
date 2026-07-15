@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,7 @@ func TestNewDownloader(t *testing.T) {
 
 func TestRunEmptyTasks(t *testing.T) {
 	d := NewDownloader(3, false, 0, 0)
-	results := d.Run(nil)
+	results := d.Run(context.Background(), nil)
 	assert.Empty(t, results)
 }
 
@@ -36,7 +37,7 @@ func TestRunDownloadSuccess(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	d := NewDownloader(1, false, 0, 0)
-	results := d.Run([]DownloadTask{{
+	results := d.Run(context.Background(), []DownloadTask{{
 		URL:      srv.URL + "/test.txt",
 		Filename: "test.txt",
 		Filetype: "txt",
@@ -62,7 +63,7 @@ func TestRunDownloadHTTPError(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(1, false, 0, 0)
-	results := d.Run([]DownloadTask{{
+	results := d.Run(context.Background(), []DownloadTask{{
 		URL:      srv.URL + "/missing",
 		Filename: "missing.txt",
 		Filetype: "txt",
@@ -82,7 +83,7 @@ func TestRunDownloadMaxSizeExceeded(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(1, false, 0, 50)
-	results := d.Run([]DownloadTask{{
+	results := d.Run(context.Background(), []DownloadTask{{
 		URL:      srv.URL + "/file.txt",
 		Filename: "file.txt",
 		Filetype: "txt",
@@ -103,7 +104,7 @@ func TestRunDownloadMinSizeNotMet(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(1, false, 10, 0)
-	results := d.Run([]DownloadTask{{
+	results := d.Run(context.Background(), []DownloadTask{{
 		URL:      srv.URL + "/file.txt",
 		Filename: "file.txt",
 		Filetype: "txt",
@@ -131,7 +132,7 @@ func TestRunSkipExisting(t *testing.T) {
 	os.WriteFile(dest, []byte("existing content"), 0644)
 
 	d := NewDownloader(1, false, 0, 0)
-	results := d.Run([]DownloadTask{{
+	results := d.Run(context.Background(), []DownloadTask{{
 		URL:      srv.URL + "/existing.txt",
 		Filename: "existing.txt",
 		Filetype: "txt",
@@ -163,7 +164,7 @@ func TestRunOverwrite(t *testing.T) {
 	os.WriteFile(dest, []byte("old content"), 0644)
 
 	d := NewDownloader(1, true, 0, 0) // overwrite=true
-	results := d.Run([]DownloadTask{{
+	results := d.Run(context.Background(), []DownloadTask{{
 		URL:      srv.URL + "/overwrite.txt",
 		Filename: "overwrite.txt",
 		Filetype: "txt",
@@ -202,7 +203,7 @@ func TestRunConcurrentDownloads(t *testing.T) {
 		}
 	}
 
-	results := d.Run(tasks)
+	results := d.Run(context.Background(), tasks)
 	assert.Len(t, results, 10)
 
 	var successCount int
@@ -225,7 +226,7 @@ func TestDownloadMD5Calculation(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	d := NewDownloader(1, false, 0, 0)
-	results := d.Run([]DownloadTask{{
+	results := d.Run(context.Background(), []DownloadTask{{
 		URL:      srv.URL + "/hello.txt",
 		Filename: "hello.txt",
 		Filetype: "txt",
