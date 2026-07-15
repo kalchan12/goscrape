@@ -66,6 +66,10 @@ func initConfig() {
 	viper.SetDefault("default_delay", "1s")
 	viper.SetDefault("default_workers", 3)
 	viper.SetDefault("default_format", "json")
+	viper.SetDefault("default_depth", 2)
+	viper.SetDefault("default_max_pages", 100)
+	viper.SetDefault("default_timeout", "30s")
+	viper.SetDefault("default_retries", 2)
 	viper.SetDefault("rotate_agents", true)
 	viper.SetDefault("user_agent", "GoScrape/1.0")
 
