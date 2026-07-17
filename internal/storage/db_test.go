@@ -167,6 +167,34 @@ func TestListByStatus(t *testing.T) {
 	assert.Len(t, running, 1)
 }
 
+func TestListByURL(t *testing.T) {
+	db := newTestDB(t)
+	insertTestRecord(t, db, "https://example.com/page1", "completed")
+	insertTestRecord(t, db, "https://other.com/page", "completed")
+	insertTestRecord(t, db, "https://example.com/page2", "completed")
+
+	results, err := db.ListByURL("example.com", 10)
+	require.NoError(t, err)
+	assert.Len(t, results, 2)
+}
+
+func TestListByDateRange(t *testing.T) {
+	db := newTestDB(t)
+	old := &CrawlRecord{
+		URL: "https://example.com/old", Depth: 1, MaxPages: 10, PagesHit: 5, Files: 2, Status: "completed",
+		CreatedAt: time.Now().Add(-48 * time.Hour), UpdatedAt: time.Now().Add(-48 * time.Hour),
+	}
+	require.NoError(t, db.Insert(old))
+	insertTestRecord(t, db, "https://example.com/new", "completed")
+
+	start := time.Now().Add(-24 * time.Hour)
+	end := time.Now().Add(1 * time.Hour)
+	results, err := db.ListByDateRange(start, end, 10)
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "https://example.com/new", results[0].URL)
+}
+
 func TestStats(t *testing.T) {
 	db := newTestDB(t)
 	insertTestRecord(t, db, "https://example.com/a", "completed")

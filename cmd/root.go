@@ -72,6 +72,11 @@ func initConfig() {
 	viper.SetDefault("default_retries", 2)
 	viper.SetDefault("rotate_agents", true)
 	viper.SetDefault("user_agent", "GoScrape/1.0")
+	viper.SetDefault("user_agents", []string{
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+	})
 	viper.SetDefault("rate_limit.requests_per_second", 2)
 	viper.SetDefault("rate_limit.burst", 5)
 	viper.SetDefault("respect_robots", false)

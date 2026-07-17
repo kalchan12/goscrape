@@ -89,6 +89,18 @@ func (d *DB) Clear() error {
 		Delete(&CrawlRecord{}).Error
 }
 
+func (d *DB) ListByURL(url string, limit int) ([]CrawlRecord, error) {
+	var records []CrawlRecord
+	err := d.db.Where("url LIKE ?", "%"+url+"%").Order("created_at DESC").Limit(limit).Find(&records).Error
+	return records, err
+}
+
+func (d *DB) ListByDateRange(start, end time.Time, limit int) ([]CrawlRecord, error) {
+	var records []CrawlRecord
+	err := d.db.Where("created_at BETWEEN ? AND ?", start, end).Order("created_at DESC").Limit(limit).Find(&records).Error
+	return records, err
+}
+
 func (d *DB) ListByStatus(status string, limit int) ([]CrawlRecord, error) {
 	var records []CrawlRecord
 	err := d.db.Where("status = ?", status).Order("created_at DESC").Limit(limit).Find(&records).Error

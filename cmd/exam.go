@@ -27,6 +27,11 @@ var examCmd = &cobra.Command{
 			return cmd.Help()
 		}
 
+		cfg := ScrapeConfig{URL: examFlags.url}
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+
 		questions, title, err := examutil.ExtractQuestionsFromURL(examFlags.url)
 		if err != nil {
 			return err

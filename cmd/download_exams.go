@@ -13,20 +13,33 @@ import (
 )
 
 var downloadExamsFlags struct {
-	output  string
-	workers int
-	baseURL string
+	output   string
+	workers  int
+	baseURL  string
+	strategy string
 }
 
 var downloadExamsCmd = &cobra.Command{
 	Use:   "download-exams",
 	Short: "Download all exam questions from every department",
-	Long:  `Crawl all departments on exitexamstudio.app, discover every exam, and save questions organized by department/year/type.`,
+	Long:  `Crawl all departments on the exam site, discover every exam, and save questions organized by department/year/type.`,
 	Example: `  goscrape download-exams
   goscrape download-exams --output ./exams
-  goscrape download-exams --workers 5`,
+  goscrape download-exams --workers 5
+  goscrape download-exams --strategy exitexamstudio`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var s examutil.ExamSiteStrategy
+		switch downloadExamsFlags.strategy {
+		case "exitexamstudio":
+			s = &examutil.ExitExamStudioStrategy{}
+		default:
+			return fmt.Errorf("unknown strategy: %s", downloadExamsFlags.strategy)
+		}
+
 		base := strings.TrimRight(downloadExamsFlags.baseURL, "/")
+		if base == "" {
+			base = strings.TrimRight(s.BaseURL(), "/")
+		}
 		outDir := downloadExamsFlags.output
 
 		fmt.Printf("Fetching department list from %s/departments ...\n", base)
@@ -36,7 +49,7 @@ var downloadExamsCmd = &cobra.Command{
 			return fmt.Errorf("fetch departments: %w", err)
 		}
 
-		deptSlugs := examutil.ExtractDepartmentLinks(body)
+		deptSlugs := examutil.ExtractDepartmentsWithStrategy(body, s)
 		fmt.Printf("Found %d departments\n", len(deptSlugs))
 
 		var allExamLinks []examutil.ExamLink
@@ -46,19 +59,19 @@ var downloadExamsCmd = &cobra.Command{
 
 		for _, slug := range deptSlugs {
 			wg.Add(1)
-			go func(s string) {
+			go func(slug string) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
-				url := base + "/departments/" + s
+				url := base + "/departments/" + slug
 				b, err := examutil.FetchPage(url)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "  SKIP %s: %v\n", s, err)
+					fmt.Fprintf(os.Stderr, "  SKIP %s: %v\n", slug, err)
 					return
 				}
 
-				links := examutil.ExtractExamLinksFromDept(b)
+				links := examutil.ExtractExamsFromDeptWithStrategy(b, s)
 				mu.Lock()
 				allExamLinks = append(allExamLinks, links...)
 				mu.Unlock()
@@ -144,5 +157,6 @@ func init() {
 
 	downloadExamsCmd.Flags().StringVarP(&downloadExamsFlags.output, "output", "o", "./exams", "Output directory")
 	downloadExamsCmd.Flags().IntVarP(&downloadExamsFlags.workers, "workers", "w", 5, "Concurrent workers")
-	downloadExamsCmd.Flags().StringVar(&downloadExamsFlags.baseURL, "base", "https://exitexamstudio.app", "Base URL")
+	downloadExamsCmd.Flags().StringVar(&downloadExamsFlags.baseURL, "base", "", "Base URL (default from strategy)")
+	downloadExamsCmd.Flags().StringVar(&downloadExamsFlags.strategy, "strategy", "exitexamstudio", "Exam site strategy")
 }

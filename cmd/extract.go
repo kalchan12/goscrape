@@ -32,14 +32,22 @@ Outputs formatted results to stdout or a file.`,
 			return cmd.Help()
 		}
 
-		cfg := scraper.Config{
+		cfg := ScrapeConfig{
 			URL:      extractFlags.url,
 			Depth:    extractFlags.depth,
 			MaxPages: 10,
 			Workers:  2,
 		}
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
 
-		s := scraper.NewScraper(cfg)
+		s := scraper.NewScraper(scraper.Config{
+			URL:      cfg.URL,
+			Depth:    cfg.Depth,
+			MaxPages: cfg.MaxPages,
+			Workers:  cfg.Workers,
+		})
 		results, err := s.Run(context.Background())
 		if err != nil {
 			return err
