@@ -43,6 +43,7 @@ type Config struct {
 	Retries        int
 	UserAgent      string
 	RotateAgents   bool
+	UserAgents     []string
 	AllowDomains   []string
 	IgnoreRobots   bool
 	Selector       string
@@ -66,14 +67,24 @@ type Scraper struct {
 	startTime    time.Time
 	fileChan     chan FileRef
 	rateLimiter  *DomainRateLimiter
+	userAgents   []string
+	agentIndex   int
 }
 
 func NewScraper(cfg Config) *Scraper {
 	s := &Scraper{
-		config:   cfg,
-		results:  make([]ScrapeResult, 0, cfg.MaxPages),
-		done:     make(chan bool),
-		fileChan: make(chan FileRef, 100),
+		config:    cfg,
+		results:   make([]ScrapeResult, 0, cfg.MaxPages),
+		done:      make(chan bool),
+		fileChan:  make(chan FileRef, 100),
+		userAgents: cfg.UserAgents,
+	}
+
+	if len(s.userAgents) == 0 {
+		s.userAgents = []string{cfg.UserAgent}
+	}
+	if len(s.userAgents) == 0 {
+		s.userAgents = []string{"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
 	}
 
 	rps := cfg.RateLimitRPS
@@ -113,6 +124,14 @@ func NewScraper(cfg Config) *Scraper {
 		domain := extractDomain(r.URL.String())
 		if err := s.rateLimiter.Wait(domain); err != nil {
 			return
+		}
+
+		if s.config.RotateAgents && len(s.userAgents) > 0 {
+			s.mu.Lock()
+			ua := s.userAgents[s.agentIndex%len(s.userAgents)]
+			s.agentIndex++
+			s.mu.Unlock()
+			r.Headers.Set("User-Agent", ua)
 		}
 
 		zap.L().Debug("Fetching",

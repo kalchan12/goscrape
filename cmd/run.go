@@ -68,6 +68,7 @@ Supports depth-limited crawling, concurrent workers, custom CSS selectors, headl
 			Retries:      runFlags.retries,
 			UserAgent:    runFlags.userAgent,
 			RotateAgents: runFlags.rotateAgents,
+			UserAgents:   viper.GetStringSlice("user_agents"),
 			AllowDomains: runFlags.allowDomains,
 			IgnoreRobots: runFlags.ignoreRobots,
 			Selector:     runFlags.selector,
